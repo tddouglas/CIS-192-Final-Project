@@ -85,41 +85,46 @@ def create_matrix():
     franchise_numbers = [float(i) for i in xrange(31)]
     # create dictionary of franchise codes to numbers
     code_to_number = dict(zip(franchise_codes, franchise_numbers))
-    url = "http://www.basketball-reference.com/play-index/tgl_finder.cgi?request=1&player=&match=game&lg_id=NBA&year_min=2016&year_max=2016&team_id=&opp_id=&is_range=N&is_playoffs=N&round_id=&best_of=&team_seed=&opp_seed=&team_seed_cmp=eq&opp_seed_cmp=eq&game_num_type=team&game_num_min=&game_num_max=&game_month=&game_location=&game_result=&is_overtime=&c1stat=blk&c1comp=gt&c1val=0&c2stat=orb&c2comp=gt&c2val=0&c3stat=opp_off_rtg&c3comp=gt&c3val=0&c4stat=off_rtg&c4comp=gt&c4val=0&order_by=pts&order_by_asc=&offset=0"
-    r = requests.get(url)
-    soup = BeautifulSoup(r.text, "html.parser")
-    games = soup.findAll("tr", class_=[u''])[2:]
     list_of_game_stats = []
     target = []
-    for game in games:
-#         For some reason <tr class=" thead"> satisfies class_=[u''] even though 
-#         "" != " thead" so I filter those out here. If you can figure out a fix
-#         so that those classes don't get picked up in games then please implement.
-        if game["class"] == [u'', u'thead']:
-            continue
-        raw_game_stats = game.find_all("td")
-        # convert the franchise codes to numbers
-        team1_id = code_to_number[raw_game_stats[2].get_text()]
-        team2_id = code_to_number[raw_game_stats[4].get_text()]
-        # create a single row of the matrix with stats for one game
-        game_stats = [team1_id] + [team2_id] + \
-            [float(raw_game_stats[i].get_text()) for i in xrange(6, 61)]
-        # add row to list of rows to be made into numpy array
-        list_of_game_stats.append(game_stats)
-        # set binary vector target data by comparing points scored
-        outcome = 1 if game_stats[15] > game_stats[42] else 0
-        target.append(outcome)
-        
+    url_base = "http://www.basketball-reference.com/play-index/tgl_finder.cgi?request=1&player=&match=game&lg_id=NBA&year_min=2016&year_max=2016&team_id=&opp_id=&is_range=N&is_playoffs=N&round_id=&best_of=&team_seed=&opp_seed=&team_seed_cmp=eq&opp_seed_cmp=eq&game_num_type=team&game_num_min=&game_num_max=&game_month=&game_location=&game_result=&is_overtime=&c1stat=blk&c1comp=gt&c1val=0&c2stat=orb&c2comp=gt&c2val=0&c3stat=opp_off_rtg&c3comp=gt&c3val=0&c4stat=off_rtg&c4comp=gt&c4val=0&order_by=pts&order_by_asc=&offset="
+    offsets = [i * 100 for i in xrange(25)]    
+    for offset in offsets:
+        url = url_base + str(offset)
+        r = requests.get(url)
+        soup = BeautifulSoup(r.text, "html.parser")
+        games = soup.findAll("tr", class_=[u''])[2:]
+        for game in games:
+    #         For some reason <tr class=" thead"> satisfies class_=[u''] even though 
+    #         "" != " thead" so I filter those out here. If you can figure out a fix
+    #         so that those classes don't get picked up in games then please implement.
+            if game["class"] == [u'', u'thead']:
+                continue
+            raw_game_stats = game.find_all("td")
+            # convert the franchise codes to numbers
+            team1_id = code_to_number[raw_game_stats[2].get_text()]
+            team2_id = code_to_number[raw_game_stats[4].get_text()]
+            # create a single row of the matrix with stats for one game
+            game_stats = [team1_id] + [team2_id] + \
+                [float(raw_game_stats[i].get_text()) for i in xrange(6, 61)]
+            # add row to list of rows to be made into numpy array
+            list_of_game_stats.append(game_stats)
+            # set binary vector target data by comparing points scored
+            outcome = 1 if game_stats[15] > game_stats[42] else 0
+            target.append(outcome)
+  
     target = np.array(target)
     data = np.array(list_of_game_stats)
+    print data.shape
+    print target.shape 
     # do PCA stuff
-    X = data
-    print X
-    y = target
+    # This reduces the umber of columns in the matrix but also changes the numbers.
+    # I have no idea what the numbers mean or which columns were kept.
+    print data
     pca = decomposition.PCA(n_components=10)
-    pca.fit(X)
-    X = pca.transform(X)
-    print X
+    pca.fit(data)
+    princinpal_component_data = pca.transform(data)
+    print princinpal_component_data
 
 
 def main():
