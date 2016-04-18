@@ -13,6 +13,8 @@ import requests
 from requests.auth import HTTPBasicAuth
 import django
 import re
+from sklearn import decomposition
+from sklearn import datasets
 
 """r = requests.get('http://api.sportsdatabase.com/nfl/query.json?sdql=date%2Cpoints%40team%3DBears%20and%20season%3D2011&output=json&api_key=guest')
 print(r.status_code)
@@ -87,7 +89,7 @@ def create_matrix():
     r = requests.get(url)
     soup = BeautifulSoup(r.text, "html.parser")
     games = soup.findAll("tr", class_=[u''])[2:]
-    list_of_game_stat_arrays = []
+    list_of_game_stats = []
     target = []
     for game in games:
 #         For some reason <tr class=" thead"> satisfies class_=[u''] even though 
@@ -100,22 +102,28 @@ def create_matrix():
         team1_id = code_to_number[raw_game_stats[2].get_text()]
         team2_id = code_to_number[raw_game_stats[4].get_text()]
         # create a single row of the matrix with stats for one game
-        game_stats_array = [team1_id] + [team2_id] + \
+        game_stats = [team1_id] + [team2_id] + \
             [float(raw_game_stats[i].get_text()) for i in xrange(6, 61)]
         # add row to list of rows to be made into numpy array
-        list_of_game_stat_arrays.append(game_stats_array)
+        list_of_game_stats.append(game_stats)
         # set binary vector target data by comparing points scored
-        outcome = 1 if game_stats_array[15] > game_stats_array[42] else 0
+        outcome = 1 if game_stats[15] > game_stats[42] else 0
         target.append(outcome)
         
     target = np.array(target)
-    data = np.array(list_of_game_stat_arrays)
-    print data
-    print target
+    data = np.array(list_of_game_stats)
+    # do PCA stuff
+    X = data
+    print X
+    y = target
+    pca = decomposition.PCA(n_components=10)
+    pca.fit(X)
+    X = pca.transform(X)
+    print X
 
 
 def main():
-    create_matrix()
+   create_matrix()
 
 if __name__ == "__main__":
     main()
