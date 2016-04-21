@@ -1,35 +1,15 @@
+
 '''
 Created on Mar 16, 2016
-
-@author: Alex
 '''
 import numpy as np
-import scipy as sp
-import matplotlib
-import csv as csv
 import urllib2
 from bs4 import BeautifulSoup, SoupStrainer
 import requests
-from requests.auth import HTTPBasicAuth
-import django
-import re
 from sklearn import decomposition
-from sklearn import datasets
+from sklearn import datasets, naive_bayes, metrics
 import datetime
 
-"""r = requests.get('http://api.sportsdatabase.com/nfl/query.json?sdql=date%2Cpoints%40team%3DBears%20and%20season%3D2011&output=json&api_key=guest')
-print(r.status_code)
-print(r.text)"""
-
-
-"""player_page_links = []
-for i in range(0, 26):
-    response = urllib2.urlopen('http://www.basketball-reference.com/players/' + chr(i + 97))
-    soup = BeautifulSoup(response.read(), 'html.parser', parseOnlyThese=SoupStrainer('strong'))
-    for link in soup.find_all('a'):
-        player_page_links.append(str('http://www.basketball-reference.com' + link['href']))
-    print(player_page_links)
-"""
 
 def scrape_rosters():
     """Scrapes the rosters of every team for individual player stats, returns
@@ -78,7 +58,8 @@ def scrape_rivalry_history(team_code, opponent_code):
     return np.array(date_diff_tuples)
     pass
 
-def create_matrix(until_this_date):
+
+def create_matrix(from_this_date, until_this_date, season):
     franchise_codes = ['ATL', 'BOS', 'BRK', 'CHO', 'CHI', 'CLE', 'DAL', 'DEN',
                        'DET', 'GSW', 'HOU', 'IND', 'LAC', 'LAL', 'MEM', 'MIA',
                        'MIL', 'MIN', 'NOP', 'NYK', 'OKC', 'ORL', 'PHI', 'PHO',
@@ -88,9 +69,10 @@ def create_matrix(until_this_date):
     code_to_number = dict(zip(franchise_codes, franchise_numbers))
     list_of_game_stats = []
     target = []
-    url_base = "http://www.basketball-reference.com/play-index/tgl_finder.cgi?request=1&match=game&lg_id=NBA&year_min=2016&year_max=2016&team_id=&opp_id=&is_playoffs=N&round_id=&best_of=&team_seed_cmp=eq&team_seed=&opp_seed_cmp=eq&opp_seed=&is_range=N&game_num_type=team&game_num_min=&game_num_max=&game_month=&game_location=&game_result=&is_overtime=&c1stat=pts&c1comp=gt&c1val=&c2stat=ast&c2comp=gt&c2val=&c3stat=drb&c3comp=gt&c3val=&c4stat=ts_pct&c4comp=gt&c4val=&c5stat=&c5comp=gt&c5val=&order_by=date_game&order_by_asc=Y&offset="
+    url_base = "http://www.basketball-reference.com/play-index/tgl_finder.cgi?request=1&match=game&lg_id=NBA&year_min=" +\
+    str(season) + "&year_max=" + str(season) + "&team_id=&opp_id=&is_playoffs=N&round_id=&best_of=&team_seed_cmp=eq&team_seed=&opp_seed_cmp=eq&opp_seed=&is_range=N&game_num_type=team&game_num_min=&game_num_max=&game_month=&game_location=&game_result=&is_overtime=&c1stat=pts&c1comp=gt&c1val=&c2stat=ast&c2comp=gt&c2val=&c3stat=drb&c3comp=gt&c3val=&c4stat=ts_pct&c4comp=gt&c4val=&c5stat=&c5comp=gt&c5val=&order_by=date_game&order_by_asc=Y&offset="
     offsets = [i * 100 for i in xrange(25)]
-    date = '' 
+    date = ''
     for offset in offsets:
         url = url_base + str(offset)
         r = requests.get(url)
@@ -98,7 +80,7 @@ def create_matrix(until_this_date):
         games = soup.findAll("tr", class_=[u''])[2:]
         break_from_outer_loop = False
         for game in games:
-    #         For some reason <tr class=" thead"> satisfies class_=[u''] even though 
+    #       For some reason <tr class=" thead"> satisfies class_=[u''] even though 
     #         "" != " thead" so I filter those out here. If you can figure out a fix
     #         so that those classes don't get picked up in games then please implement.
             if game["class"] == [u'', u'thead']:
@@ -107,7 +89,10 @@ def create_matrix(until_this_date):
             # get the date
             date = raw_game_stats[1].get_text()
             date = datetime.datetime(int(date[0:4]), int(date[5:7]), int(date[8:]))
-            # don't collect this data if we've passed the until date and break loop
+            # don't collect this data if we haven't reached the start date and break inner loop
+            if date < from_this_date:
+                continue
+            # don't collect this data if we've passed the until date and restart loop
             if date >= until_this_date:
                 break_from_outer_loop = True
                 break;
@@ -123,26 +108,66 @@ def create_matrix(until_this_date):
             outcome = 1 if game_stats[15] > game_stats[42] else 0
             target.append(outcome)
         if break_from_outer_loop:
-            break;      
+            break;
     target = np.array(target)
     data = np.array(list_of_game_stats)
-    print data.shape
-    print target.shape 
+    return data, target
+
+
+def run_PCA(data, target):
     # do PCA stuff
     # This reduces the number of columns in the matrix but also changes the numbers.
     # I have no idea what the numbers mean or which columns were kept.
-    print data
-    pca = decomposition.PCA(n_components=10)
+    pca = decomposition.PCA(n_components=5)
     pca.fit(data)
     princinpal_component_data = pca.transform(data)
-    print princinpal_component_data
+    return princinpal_component_data, target
+    pass
+
+
+def simulation(season):
+    # 2014-5 regular season started 10/28/2015 and ended 4/15/2015
+    prev_start = datetime.datetime(season - 2, 10, 28)
+    prev_end = datetime.datetime(season - 1, 04, 16)
+    # Initial training set is all the games from 2014-5 season
+    training_set, target = create_matrix(prev_start, prev_end, season-1)
+    training_set, target = run_PCA(training_set, target)
+    all_predictions = np.array([])
+    model = naive_bayes.GaussianNB()
+    model.fit(training_set, target)
+    # 2015-6 regular season started 10/27/2015 and ended 4/13/2016
+    current_date = datetime.datetime(season-1, 10, 27)
+    next_date = datetime.datetime(season-1, 10, 28)
+    end_date = datetime.datetime(season, 4, 14)
+    while current_date <= end_date:
+        daily_data, expected = np.array([]), np.array([])
+        # Pull in games from just a single day
+        # Loop because occasionally there are dates with no games
+        while daily_data.size == 0:
+            daily_data, expected = create_matrix(current_date, next_date, season)
+            current_date = next_date
+            next_date += datetime.timedelta(days=1)
+        # Run PCA on daily data, make prediction, append it to our result set
+        daily_data, expected = run_PCA(daily_data, expected)
+        daily_predictions = model.predict(daily_data)
+        np.append(all_predictions, daily_predictions)
+        print(zip(daily_predictions, expected))
+        # Replace n oldest entries in training/target sets with n games from today
+        n, _ = daily_data.shape
+        training_set = np.concatenate((training_set[n:], daily_data))
+        target = np.concatenate((target[n:], expected))
+        # Retrain the model with the actual outcomes of the day's games
+        training_set, target = run_PCA(training_set, target)
+        model.fit(training_set, target)
+    return daily_predictions, target
+    pass
 
 
 def main():
-    # all data from games up until this date is processed
-    until_this_date = datetime.datetime(2016, 02, 07)
-    create_matrix(until_this_date)
-
+    final_predictions, final_outcomes = simulation(2016)
+    p, r, f1, _ = metrics.precision_recall_fscore_support(final_predictions,
+                                                          final_outcomes,
+                                                          average='binary')
+    print(p, r, f1)
 if __name__ == "__main__":
     main()
-
