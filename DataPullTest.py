@@ -89,7 +89,8 @@ def create_matrix(until_this_date):
     list_of_game_stats = []
     target = []
     url_base = "http://www.basketball-reference.com/play-index/tgl_finder.cgi?request=1&match=game&lg_id=NBA&year_min=2016&year_max=2016&team_id=&opp_id=&is_playoffs=N&round_id=&best_of=&team_seed_cmp=eq&team_seed=&opp_seed_cmp=eq&opp_seed=&is_range=N&game_num_type=team&game_num_min=&game_num_max=&game_month=&game_location=&game_result=&is_overtime=&c1stat=pts&c1comp=gt&c1val=&c2stat=ast&c2comp=gt&c2val=&c3stat=drb&c3comp=gt&c3val=&c4stat=ts_pct&c4comp=gt&c4val=&c5stat=&c5comp=gt&c5val=&order_by=date_game&order_by_asc=Y&offset="
-    offsets = [i * 100 for i in xrange(25)]    
+    offsets = [i * 100 for i in xrange(25)]
+    date = '' 
     for offset in offsets:
         url = url_base + str(offset)
         r = requests.get(url)
@@ -107,7 +108,7 @@ def create_matrix(until_this_date):
             date = raw_game_stats[1].get_text()
             date = datetime.datetime(int(date[0:4]), int(date[5:7]), int(date[8:]))
             # don't collect this data if we've passed the until date and break loop
-            if date > until_this_date:
+            if date >= until_this_date:
                 break_from_outer_loop = True
                 break;
             # convert the franchise codes to numbers
@@ -138,7 +139,7 @@ def create_matrix(until_this_date):
 
 
 def main():
-    # all data from games before and on this date is processed
+    # all data from games up until this date is processed
     until_this_date = datetime.datetime(2016, 02, 07)
     create_matrix(until_this_date)
 
