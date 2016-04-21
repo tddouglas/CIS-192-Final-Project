@@ -15,6 +15,7 @@ import django
 import re
 from sklearn import decomposition
 from sklearn import datasets
+import datetime
 
 """r = requests.get('http://api.sportsdatabase.com/nfl/query.json?sdql=date%2Cpoints%40team%3DBears%20and%20season%3D2011&output=json&api_key=guest')
 print(r.status_code)
@@ -77,7 +78,7 @@ def scrape_rivalry_history(team_code, opponent_code):
     return np.array(date_diff_tuples)
     pass
 
-def create_matrix():
+def create_matrix(until_this_date):
     franchise_codes = ['ATL', 'BOS', 'BRK', 'CHO', 'CHI', 'CLE', 'DAL', 'DEN',
                        'DET', 'GSW', 'HOU', 'IND', 'LAC', 'LAL', 'MEM', 'MIA',
                        'MIL', 'MIN', 'NOP', 'NYK', 'OKC', 'ORL', 'PHI', 'PHO',
@@ -87,13 +88,14 @@ def create_matrix():
     code_to_number = dict(zip(franchise_codes, franchise_numbers))
     list_of_game_stats = []
     target = []
-    url_base = "http://www.basketball-reference.com/play-index/tgl_finder.cgi?request=1&player=&match=game&lg_id=NBA&year_min=2016&year_max=2016&team_id=&opp_id=&is_range=N&is_playoffs=N&round_id=&best_of=&team_seed=&opp_seed=&team_seed_cmp=eq&opp_seed_cmp=eq&game_num_type=team&game_num_min=&game_num_max=&game_month=&game_location=&game_result=&is_overtime=&c1stat=blk&c1comp=gt&c1val=0&c2stat=orb&c2comp=gt&c2val=0&c3stat=opp_off_rtg&c3comp=gt&c3val=0&c4stat=off_rtg&c4comp=gt&c4val=0&order_by=pts&order_by_asc=&offset="
+    url_base = "http://www.basketball-reference.com/play-index/tgl_finder.cgi?request=1&match=game&lg_id=NBA&year_min=2016&year_max=2016&team_id=&opp_id=&is_playoffs=N&round_id=&best_of=&team_seed_cmp=eq&team_seed=&opp_seed_cmp=eq&opp_seed=&is_range=N&game_num_type=team&game_num_min=&game_num_max=&game_month=&game_location=&game_result=&is_overtime=&c1stat=pts&c1comp=gt&c1val=&c2stat=ast&c2comp=gt&c2val=&c3stat=drb&c3comp=gt&c3val=&c4stat=ts_pct&c4comp=gt&c4val=&c5stat=&c5comp=gt&c5val=&order_by=date_game&order_by_asc=Y&offset="
     offsets = [i * 100 for i in xrange(25)]    
     for offset in offsets:
         url = url_base + str(offset)
         r = requests.get(url)
         soup = BeautifulSoup(r.text, "html.parser")
         games = soup.findAll("tr", class_=[u''])[2:]
+        break_from_outer_loop = False
         for game in games:
     #         For some reason <tr class=" thead"> satisfies class_=[u''] even though 
     #         "" != " thead" so I filter those out here. If you can figure out a fix
@@ -101,6 +103,13 @@ def create_matrix():
             if game["class"] == [u'', u'thead']:
                 continue
             raw_game_stats = game.find_all("td")
+            # get the date
+            date = raw_game_stats[1].get_text()
+            date = datetime.datetime(int(date[0:4]), int(date[5:7]), int(date[8:]))
+            # don't collect this data if we've passed the until date and break loop
+            if date > until_this_date:
+                break_from_outer_loop = True
+                break;
             # convert the franchise codes to numbers
             team1_id = code_to_number[raw_game_stats[2].get_text()]
             team2_id = code_to_number[raw_game_stats[4].get_text()]
@@ -112,13 +121,14 @@ def create_matrix():
             # set binary vector target data by comparing points scored
             outcome = 1 if game_stats[15] > game_stats[42] else 0
             target.append(outcome)
-  
+        if break_from_outer_loop:
+            break;      
     target = np.array(target)
     data = np.array(list_of_game_stats)
     print data.shape
     print target.shape 
     # do PCA stuff
-    # This reduces the umber of columns in the matrix but also changes the numbers.
+    # This reduces the number of columns in the matrix but also changes the numbers.
     # I have no idea what the numbers mean or which columns were kept.
     print data
     pca = decomposition.PCA(n_components=10)
@@ -128,7 +138,9 @@ def create_matrix():
 
 
 def main():
-   create_matrix()
+    # all data from games before and on this date is processed
+    until_this_date = datetime.datetime(2016, 02, 07)
+    create_matrix(until_this_date)
 
 if __name__ == "__main__":
     main()
