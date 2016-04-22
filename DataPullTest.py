@@ -76,9 +76,9 @@ def scrape_rivalry_history(team_code, opponent_code):
     for i in range(1, len(raw_strings), 16):
         date_diff_tuples.append((raw_strings[i], raw_strings[i + 10]))
     return np.array(date_diff_tuples)
-    pass
 
-def create_matrix(until_this_date):
+
+def scrape_data(until_this_date):
     franchise_codes = ['ATL', 'BOS', 'BRK', 'CHO', 'CHI', 'CLE', 'DAL', 'DEN',
                        'DET', 'GSW', 'HOU', 'IND', 'LAC', 'LAL', 'MEM', 'MIA',
                        'MIL', 'MIN', 'NOP', 'NYK', 'OKC', 'ORL', 'PHI', 'PHO',
@@ -91,7 +91,10 @@ def create_matrix(until_this_date):
     url_base = "http://www.basketball-reference.com/play-index/tgl_finder.cgi?request=1&match=game&lg_id=NBA&year_min=2016&year_max=2016&team_id=&opp_id=&is_playoffs=N&round_id=&best_of=&team_seed_cmp=eq&team_seed=&opp_seed_cmp=eq&opp_seed=&is_range=N&game_num_type=team&game_num_min=&game_num_max=&game_month=&game_location=&game_result=&is_overtime=&c1stat=pts&c1comp=gt&c1val=&c2stat=ast&c2comp=gt&c2val=&c3stat=drb&c3comp=gt&c3val=&c4stat=ts_pct&c4comp=gt&c4val=&c5stat=&c5comp=gt&c5val=&order_by=date_game&order_by_asc=Y&offset="
     offsets = [i * 100 for i in xrange(25)]
     date = '' 
+    i = 0
     for offset in offsets:
+        i += 1
+        print "scraping ", i, "th page of stats"
         url = url_base + str(offset)
         r = requests.get(url)
         soup = BeautifulSoup(r.text, "html.parser")
@@ -128,20 +131,28 @@ def create_matrix(until_this_date):
     data = np.array(list_of_game_stats)
     print data.shape
     print target.shape 
-    # do PCA stuff
-    # This reduces the number of columns in the matrix but also changes the numbers.
-    # I have no idea what the numbers mean or which columns were kept.
     print data
+    return data, target
+    
+# do PCA stuff
+# This reduces the number of columns in the matrix but also changes the numbers.
+# I have no idea what the numbers mean or which columns were kept.    
+def PCA(data):
     pca = decomposition.PCA(n_components=10)
     pca.fit(data)
     princinpal_component_data = pca.transform(data)
     print princinpal_component_data
+    return princinpal_component_data
 
 
 def main():
     # all data from games up until this date is processed
-    until_this_date = datetime.datetime(2016, 02, 07)
-    create_matrix(until_this_date)
+    until_this_date = datetime.datetime(2016, 01, 20)
+    data, target = scrape_data(until_this_date)
+    data_to_train_classifier_on = PCA(data)
+    model = LinearSVC()
+    model.fit(data, target)
+
 
 if __name__ == "__main__":
     main()
